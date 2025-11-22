@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { supabase } from '../supabaseClient';
 import { Dictionary } from '../types';
-import { Lock, Key, LogIn } from 'lucide-react';
+import { Lock, Key, LogIn, Mail } from 'lucide-react';
 import { Spinner } from './Spinner';
 
 interface AuthProps {
@@ -12,10 +12,11 @@ interface AuthProps {
 export const Auth: React.FC<AuthProps> = ({ t, onAuthComplete }) => {
   const [loading, setLoading] = useState(false);
   const [email, setEmail] = useState('');
-  const [password, setPassword] = useState(''); // Use magic link in prod, simple password for now
+  const [password, setPassword] = useState('');
   const [mode, setMode] = useState<'LOGIN' | 'API_KEY'>('LOGIN');
   const [apiKey, setApiKey] = useState('');
   const [user, setUser] = useState<any>(null);
+  const [message, setMessage] = useState<{type: 'error' | 'success', text: string} | null>(null);
 
   useEffect(() => {
     const checkSession = async () => {
@@ -48,25 +49,38 @@ export const Auth: React.FC<AuthProps> = ({ t, onAuthComplete }) => {
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
-    // For simplicity, using sign up if sign in fails or implementing a basic flow
-    // In production, split Sign In / Sign Up
+    setMessage(null);
+
+    // 1. Try to Sign In
     const { data, error } = await supabase.auth.signInWithPassword({
       email,
       password,
     });
 
     if (error) {
-      // Try Sign Up
+      // 2. If Sign In fails, try to Sign Up
+      // Important: Add emailRedirectTo to ensure verification link points to Render, not localhost
       const { data: signUpData, error: signUpError } = await supabase.auth.signUp({
         email,
         password,
+        options: {
+          emailRedirectTo: window.location.origin
+        }
       });
       
       if (signUpError) {
-        alert(signUpError.message);
+        setMessage({ type: 'error', text: signUpError.message });
       } else if (signUpData.user) {
-        setUser(signUpData.user);
-        setMode('API_KEY');
+        // Check if email confirmation is required
+        if (signUpData.user.identities?.length === 0) {
+           setMessage({ type: 'error', text: "Tài khoản này đã tồn tại. Vui lòng thử mật khẩu khác." });
+        } else if (!signUpData.session) {
+           setMessage({ type: 'success', text: "Đăng ký thành công! Vui lòng kiểm tra email để xác thực tài khoản trước khi đăng nhập." });
+        } else {
+           // Auto logged in (if confirm email is disabled)
+           setUser(signUpData.user);
+           setMode('API_KEY');
+        }
       }
     } else if (data.user) {
       setUser(data.user);
@@ -78,8 +92,6 @@ export const Auth: React.FC<AuthProps> = ({ t, onAuthComplete }) => {
   const handleSaveKey = async () => {
     if (!user || !apiKey) return;
     setLoading(true);
-
-    console.log("Attempting to save key for user:", user.id);
 
     // Upsert profile
     const { error } = await supabase
@@ -94,8 +106,7 @@ export const Auth: React.FC<AuthProps> = ({ t, onAuthComplete }) => {
 
     if (error) {
       console.error("Supabase Save Error:", error);
-      // Show specific error message to user
-      alert(`Lỗi lưu Key: ${error.message || JSON.stringify(error)}`);
+      alert(`Lỗi lưu Key: ${error.message}`);
     } else {
       onAuthComplete(user.id, apiKey);
     }
@@ -118,6 +129,12 @@ export const Auth: React.FC<AuthProps> = ({ t, onAuthComplete }) => {
           </div>
           <h2 className="text-2xl font-bold text-slate-900">Micro Mandarin</h2>
         </div>
+
+        {message && (
+          <div className={`p-3 rounded-xl text-sm ${message.type === 'error' ? 'bg-red-50 text-red-600 border border-red-100' : 'bg-green-50 text-green-700 border border-green-100'}`}>
+            {message.text}
+          </div>
+        )}
 
         {mode === 'LOGIN' ? (
           <form onSubmit={handleLogin} className="space-y-4">
@@ -146,6 +163,9 @@ export const Auth: React.FC<AuthProps> = ({ t, onAuthComplete }) => {
              <button type="submit" className="w-full bg-slate-900 text-white py-3 rounded-xl font-bold hover:bg-slate-800 transition-colors flex justify-center gap-2 items-center">
                <LogIn size={18} /> Sign In / Sign Up
              </button>
+             <p className="text-xs text-center text-slate-400 mt-2">
+               If you don't have an account, one will be created for you.
+             </p>
           </form>
         ) : (
           <div className="space-y-4 animate-in fade-in">
