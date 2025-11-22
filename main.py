@@ -26,7 +26,8 @@ class LessonRequest(BaseModel):
     lang: str = "vi"
 
 # --- Helper Functions ---
-def get_gemini_model(api_key: str, model_name: str = "gemini-1.5-flash", response_mime_type: str = "application/json"):
+# UPDATED: Default model changed to gemini-2.5-flash
+def get_gemini_model(api_key: str, model_name: str = "gemini-2.5-flash", response_mime_type: str = "application/json"):
     genai.configure(api_key=api_key)
     generation_config = {
         "temperature": 0.5,
@@ -96,7 +97,8 @@ async def generate_lesson(
         }}
         """
 
-        model = get_gemini_model(x_gemini_api_key)
+        # Use gemini-2.5-flash
+        model = get_gemini_model(x_gemini_api_key, model_name="gemini-2.5-flash")
         response = model.generate_content(system_instruction)
         
         return json.loads(response.text)
@@ -121,11 +123,7 @@ async def analyze_audio(
         # Read audio file into memory
         audio_bytes = await audio.read()
         
-        # Create a temporary file because Gemini SDK expects a path or a specific blob structure
-        # Note: For optimal performance in production, consider passing bytes directly if SDK supports it 
-        # or handling this in memory. Here we use a temp file for compatibility.
-        
-        # NOTE: Gemini 1.5 Flash supports audio input. We need to supply the mime_type.
+        # Prepare audio part for Gemini
         audio_part = {
             "mime_type": "audio/webm", 
             "data": audio_bytes
@@ -168,7 +166,8 @@ async def analyze_audio(
         - If audio is silent, return score 0.
         """
 
-        model = get_gemini_model(x_gemini_api_key)
+        # Use gemini-2.5-flash
+        model = get_gemini_model(x_gemini_api_key, model_name="gemini-2.5-flash")
         
         # Generate content with both text prompt and audio part
         response = model.generate_content([system_prompt, audio_part])
