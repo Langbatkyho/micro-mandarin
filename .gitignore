@@ -1,0 +1,39 @@
+# --- System & IDE ---
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+
+# --- Python (Backend) ---
+__pycache__/
+*.py[cod]
+*$py.class
+venv/
+.venv/
+env/
+*.log
+
+# --- Node.js (Frontend) ---
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# --- Build Output ---
+dist/
+build/
+out/
+
+# --- Environment Variables (RẤT QUAN TRỌNG) ---
+# Chặn tuyệt đối các file chứa Key/Password
+.env
+.env.local
+.env.*.local
+*.pem
+
+# --- Gemini/Media ---
+# Nếu bạn có test ghi âm file ra đĩa
+*.webm
+*.mp3
+*.wav

@@ -1,0 +1,7 @@
+{
+  "name": "Micro Mandarin AI",
+  "description": "A stateless, serverless Chinese pronunciation coach powered by Gemini 2.5 Flash. Generate lessons and practice speaking with real-time AI feedback.",
+  "requestFramePermissions": [
+    "microphone"
+  ]
+}
