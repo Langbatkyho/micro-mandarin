@@ -79,16 +79,23 @@ export const Auth: React.FC<AuthProps> = ({ t, onAuthComplete }) => {
     if (!user || !apiKey) return;
     setLoading(true);
 
+    console.log("Attempting to save key for user:", user.id);
+
     // Upsert profile
     const { error } = await supabase
       .from('profiles')
-      .upsert({ id: user.id, gemini_api_key: apiKey });
+      .upsert({ 
+        id: user.id, 
+        gemini_api_key: apiKey,
+        email: user.email 
+      });
 
     setLoading(false);
 
     if (error) {
-      console.error(error);
-      alert("Error saving key");
+      console.error("Supabase Save Error:", error);
+      // Show specific error message to user
+      alert(`Lỗi lưu Key: ${error.message || JSON.stringify(error)}`);
     } else {
       onAuthComplete(user.id, apiKey);
     }
