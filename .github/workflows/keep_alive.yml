@@ -24,28 +24,29 @@ jobs:
           for ((i=1; i<=MAX_RETRIES; i++)); do
             echo "Attempt $i/$MAX_RETRIES..."
             
-            # Gửi request GET, lấy HTTP Status Code.
-            # -s: Silent (không hiện progress bar)
-            # -o /dev/null: Bỏ qua body response
-            # -w "%{http_code}": Chỉ in ra status code
-            # -L: Follow redirects
-            # --max-time 30: Timeout cho mỗi request là 30s
-            STATUS_CODE=$(curl -s -o /dev/null -w "%{http_code}" -L --max-time 30 "$URL")
+            # Gửi request GET
+            # -A: Giả lập User Agent để tránh bị chặn
+            # --max-time 30: Timeout 30s
+            STATUS_CODE=$(curl -s -o /dev/null -w "%{http_code}" -L --max-time 30 -A "GitHubActions-KeepAlive" "$URL")
             
             echo "Server returned status: $STATUS_CODE"
             
-            # Nếu status là 200 (OK), server đã dậy
-            if [ "$STATUS_CODE" -eq 200 ]; then
-              echo "✅ Success! Server is active and responding."
+            # Chấp nhận các status code sau là thành công:
+            # 200-299: Thành công
+            # 300-399: Redirect (thường là redirect sang HTTPS hoặc /docs)
+            # 404: Not Found (FastAPI chạy nhưng chưa định nghĩa route /, vẫn tính là server đã dậy)
+            # 401/403: Unauthorized (Server chạy nhưng chặn quyền)
+            if [[ "$STATUS_CODE" =~ ^(2[0-9][0-9]|3[0-9][0-9]|404|401|403)$ ]]; then
+              echo "✅ Success! Server is active (Status: $STATUS_CODE)."
               exit 0
             fi
             
-            # Nếu chưa phải 200, đợi và thử lại
+            # Nếu gặp 502, 503 (Bad Gateway/Service Unavailable) hoặc 000 (Connection Failed), nghĩa là đang khởi động
             if [ "$i" -lt "$MAX_RETRIES" ]; then
-              echo "Server not ready yet (sleeping for ${WAIT_SECONDS}s)..."
+              echo "Server responding with $STATUS_CODE (likely starting up). Sleeping for ${WAIT_SECONDS}s..."
               sleep $WAIT_SECONDS
             else
-              echo "❌ Failed to wake up server after $MAX_RETRIES attempts."
+              echo "❌ Failed to wake up server after $MAX_RETRIES attempts. Last status: $STATUS_CODE"
               exit 1
             fi
           done
