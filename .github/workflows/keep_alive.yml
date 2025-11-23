@@ -1,0 +1,26 @@
+name: Keep Alive Backend
+
+on:
+  schedule:
+    # Giải thích Cron:
+    # */14 : Chạy vào các phút thứ 0, 14, 28, 42, 56 của mỗi giờ.
+    #        (Khoảng cách lớn nhất là 14 phút, đảm bảo < 15 phút ngủ đông của Render)
+    # 6-23 : Chỉ chạy từ 6h sáng đến 23h đêm (giờ UTC).
+    # * * * : Mọi ngày trong tháng, mọi tháng, mọi ngày trong tuần.
+    - cron: '*/14 6-23 * * *'
+  
+  # Cho phép bạn bấm nút "Run workflow" thủ công trên GitHub để test
+  workflow_dispatch:
+
+jobs:
+  ping_render:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Ping Backend Health Endpoint
+        run: |
+          # Thay thế URL bên dưới bằng link backend thực tế của bạn
+          # Thêm cờ -I để chỉ lấy Header (nhẹ hơn) thay vì tải toàn bộ nội dung
+          # Thêm cờ -m 10 để timeout sau 10s nếu treo
+          curl -I -m 10 https://micro-mandarin-back.onrender.com/health
+          
+          echo "Ping sent at $(date)"
