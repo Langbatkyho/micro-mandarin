@@ -1,4 +1,4 @@
-const CACHE_NAME = 'micro-mandarin-v2';
+const CACHE_NAME = 'micro-mandarin-v3';
 const urlsToCache = [
   '/',
   '/index.html',

@@ -1,19 +1,25 @@
+import { GoogleGenAI, Type } from "@google/genai";
 import { HSKLevel, LessonData, AudioAnalysisResult } from '../types';
 
-// Safe way to access environment variables in various environments
-const getEnv = (key: string) => {
-  try {
-    // @ts-ignore
-    return import.meta.env?.[key] || (window as any)._env_?.[key];
-  } catch (e) {
-    return undefined;
-  }
+const MODEL_NAME = 'gemini-2.5-flash';
+
+// Helper to convert Blob to Base64
+const blobToBase64 = (blob: Blob): Promise<string> => {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onloadend = () => {
+      const base64String = reader.result as string;
+      // Remove data url prefix (e.g. "data:audio/webm;base64,")
+      const base64 = base64String.split(',')[1];
+      resolve(base64);
+    };
+    reader.onerror = reject;
+    reader.readAsDataURL(blob);
+  });
 };
 
-const BACKEND_URL = getEnv('VITE_BACKEND_URL') || "http://localhost:8000";
-
 /**
- * Generates a Chinese lesson module via Python Backend
+ * Generates a Chinese lesson module using Gemini 2.5 Flash
  */
 export const generateLesson = async (
   topic: string, 
@@ -22,29 +28,78 @@ export const generateLesson = async (
   apiKey: string
 ): Promise<LessonData> => {
   
-  const response = await fetch(`${BACKEND_URL}/api/generate-lesson`, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'x-gemini-api-key': apiKey
-    },
-    body: JSON.stringify({
-      topic,
-      level,
-      lang
-    })
+  const ai = new GoogleGenAI({ apiKey });
+
+  const prompt = `Generate a Chinese lesson about "${topic}" for level ${level}.
+The user's native language is ${lang === 'en' ? 'English' : 'Vietnamese'}.
+Provide translations and explanations in ${lang === 'en' ? 'English' : 'Vietnamese'}.
+
+Structure:
+1. lesson_title: Title in Chinese and ${lang}.
+2. context_intro: Brief intro.
+3. vocabulary: List of new words.
+4. dialogue: A conversation.
+5. grammar_point: One key grammar point used in the dialogue.
+`;
+
+  const response = await ai.models.generateContent({
+    model: MODEL_NAME,
+    contents: prompt,
+    config: {
+      responseMimeType: "application/json",
+      responseSchema: {
+        type: Type.OBJECT,
+        properties: {
+          lesson_title: { type: Type.STRING },
+          context_intro: { type: Type.STRING },
+          vocabulary: {
+            type: Type.ARRAY,
+            items: {
+              type: Type.OBJECT,
+              properties: {
+                hanzi: { type: Type.STRING },
+                pinyin: { type: Type.STRING },
+                translation: { type: Type.STRING },
+                type: { type: Type.STRING }
+              },
+              required: ['hanzi', 'pinyin', 'translation', 'type']
+            }
+          },
+          dialogue: {
+            type: Type.ARRAY,
+            items: {
+              type: Type.OBJECT,
+              properties: {
+                role: { type: Type.STRING },
+                chinese: { type: Type.STRING },
+                pinyin: { type: Type.STRING },
+                translation: { type: Type.STRING }
+              },
+              required: ['role', 'chinese', 'pinyin', 'translation']
+            }
+          },
+          grammar_point: {
+            type: Type.OBJECT,
+            properties: {
+              structure: { type: Type.STRING },
+              explanation: { type: Type.STRING }
+            },
+            required: ['structure', 'explanation']
+          }
+        },
+        required: ['lesson_title', 'context_intro', 'vocabulary', 'dialogue', 'grammar_point']
+      }
+    }
   });
 
-  if (!response.ok) {
-    const error = await response.json().catch(() => ({ detail: response.statusText }));
-    throw new Error(error.detail || "Failed to generate lesson");
-  }
-
-  return await response.json();
+  const jsonText = response.text;
+  if (!jsonText) throw new Error("No content generated");
+  
+  return JSON.parse(jsonText) as LessonData;
 };
 
 /**
- * Analyzes user audio via Python Backend
+ * Analyzes user audio using Gemini 2.5 Flash Multimodal capabilities
  */
 export const analyzeAudio = async (
   audioBlob: Blob, 
@@ -54,25 +109,67 @@ export const analyzeAudio = async (
   apiKey: string
 ): Promise<AudioAnalysisResult> => {
 
-  const formData = new FormData();
-  formData.append("audio", audioBlob, "recording.webm");
-  formData.append("target_text", targetText);
-  formData.append("target_pinyin", targetPinyin);
-  formData.append("lang", lang);
+  const ai = new GoogleGenAI({ apiKey });
+  const base64Audio = await blobToBase64(audioBlob);
 
-  const response = await fetch(`${BACKEND_URL}/api/analyze-audio`, {
-    method: 'POST',
-    headers: {
-      // Content-Type is automatically set for FormData
-      'x-gemini-api-key': apiKey
+  const prompt = `Analyze the user's pronunciation of the Chinese text: "${targetText}" (Pinyin: ${targetPinyin}).
+The user's native language is ${lang === 'en' ? 'English' : 'Vietnamese'}.
+Provide feedback in ${lang === 'en' ? 'English' : 'Vietnamese'}.
+
+Compare the audio to the expected text.
+Return a JSON object with:
+- heard_transcript: What Chinese words you heard.
+- heard_pinyin: The Pinyin of what you heard.
+- score: A score from 0-100.
+- tone_accuracy: "Perfect", "Good", "Needs Work", or "Bad".
+- overall_feedback: Constructive feedback.
+- errors: List of specific pronunciation errors.
+`;
+
+  const response = await ai.models.generateContent({
+    model: MODEL_NAME,
+    contents: {
+      parts: [
+        {
+          inlineData: {
+            mimeType: audioBlob.type || 'audio/webm', 
+            data: base64Audio
+          }
+        },
+        { text: prompt }
+      ]
     },
-    body: formData
+    config: {
+      responseMimeType: "application/json",
+      responseSchema: {
+        type: Type.OBJECT,
+        properties: {
+          heard_transcript: { type: Type.STRING },
+          heard_pinyin: { type: Type.STRING },
+          score: { type: Type.NUMBER },
+          tone_accuracy: { type: Type.STRING },
+          overall_feedback: { type: Type.STRING },
+          errors: {
+            type: Type.ARRAY,
+            items: {
+              type: Type.OBJECT,
+              properties: {
+                word: { type: Type.STRING },
+                expected_tone: { type: Type.STRING },
+                heard_tone: { type: Type.STRING },
+                comment: { type: Type.STRING }
+              },
+              required: ['word', 'expected_tone', 'heard_tone', 'comment']
+            }
+          }
+        },
+        required: ['heard_transcript', 'heard_pinyin', 'score', 'tone_accuracy', 'overall_feedback', 'errors']
+      }
+    }
   });
 
-  if (!response.ok) {
-    const error = await response.json().catch(() => ({ detail: response.statusText }));
-    throw new Error(error.detail || "Failed to analyze audio");
-  }
+  const jsonText = response.text;
+  if (!jsonText) throw new Error("No analysis generated");
 
-  return await response.json();
+  return JSON.parse(jsonText) as AudioAnalysisResult;
 };
