@@ -24,10 +24,12 @@ const blobToBase64 = (blob: Blob): Promise<string> => {
 export const generateLesson = async (
   topic: string, 
   level: HSKLevel, 
-  lang: 'en' | 'vi', 
+  lang: 'en' | 'vi',
   apiKey: string
 ): Promise<LessonData> => {
   
+  if (!apiKey) throw new Error("API Key is missing");
+
   const ai = new GoogleGenAI({ apiKey });
 
   const prompt = `Generate a Chinese lesson about "${topic}" for level ${level}.
@@ -108,6 +110,8 @@ export const analyzeAudio = async (
   lang: 'en' | 'vi',
   apiKey: string
 ): Promise<AudioAnalysisResult> => {
+
+  if (!apiKey) throw new Error("API Key is missing");
 
   const ai = new GoogleGenAI({ apiKey });
   const base64Audio = await blobToBase64(audioBlob);

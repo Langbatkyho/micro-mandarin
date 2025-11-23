@@ -1,8 +1,7 @@
-
 import React, { useState, useEffect } from 'react';
 import { generateLesson, analyzeAudio } from './services/geminiService';
 import { getProfile, saveProfile, getHistory, saveHistoryEntry, updateHistoryScore, clearAllData } from './services/storage';
-import { AppState, HSKLevel, LessonData, DialogueLine, AudioAnalysisResult, Dictionary, View, UserProfile, HistoryEntry } from './types';
+import { HSKLevel, LessonData, DialogueLine, AudioAnalysisResult, Dictionary, View, UserProfile, HistoryEntry } from './types';
 import { AudioRecorder } from './components/AudioRecorder';
 import { FeedbackCard } from './components/FeedbackCard';
 import { DialogueView } from './components/DialogueView';
@@ -12,8 +11,7 @@ import { HistoryView } from './components/HistoryView';
 import { SettingsView } from './components/SettingsView';
 import { NavBar } from './components/NavBar';
 import { Auth } from './components/Auth';
-import { supabase } from './supabaseClient';
-import { BookOpen, Mic, Sparkles, ChevronRight, Globe, Settings, LogOut } from 'lucide-react';
+import { Sparkles, BookOpen, Mic, ChevronRight, Globe } from 'lucide-react';
 
 export type Language = 'en' | 'vi';
 
@@ -47,7 +45,7 @@ export const TRANSLATIONS: Record<Language, Dictionary> = {
     heard: "Heard",
     perfect: "Perfect pronunciation! No errors detected.",
     errorMicrophone: "Could not access microphone. Please grant permission.",
-    errorGen: "Failed to generate lesson. Please check API Key or try again.",
+    errorGen: "Failed to generate lesson. Please check network or try again.",
     errorAnalysis: "Analysis failed. Please try again.",
     perfectMatch: "Perfect pronunciation! No errors detected.",
     hsk1: "HSK1 (Beginner)",
@@ -71,7 +69,7 @@ export const TRANSLATIONS: Record<Language, Dictionary> = {
     date: "Date",
     bestScore: "Best Score",
     signIn: "Sign In",
-    signOut: "Sign Out",
+    signOut: "Reset App",
     apiKeyReq: "API Key Required",
     apiKeyPlaceholder: "Enter your Google Gemini API Key",
     saveKey: "Save Key",
@@ -84,7 +82,7 @@ export const TRANSLATIONS: Record<Language, Dictionary> = {
     deleteData: "Delete Personal Data",
     deleteDataConfirm: "Are you sure? This will delete your learning history and reset your profile settings on this device.",
     deleteDataDesc: "Wipe history and local profile",
-    accountActions: "Account"
+    accountActions: "Actions"
   },
   vi: {
     title: "Micro Mandarin",
@@ -115,7 +113,7 @@ export const TRANSLATIONS: Record<Language, Dictionary> = {
     heard: "Nghe",
     perfect: "Phát âm hoàn hảo! Không tìm thấy lỗi.",
     errorMicrophone: "Không thể truy cập micro. Vui lòng cấp quyền.",
-    errorGen: "Không thể tạo bài học. Vui lòng kiểm tra API Key hoặc thử lại.",
+    errorGen: "Không thể tạo bài học. Vui lòng kiểm tra mạng hoặc thử lại.",
     errorAnalysis: "Phân tích thất bại. Vui lòng thử lại.",
     perfectMatch: "Phát âm hoàn hảo! Không có lỗi.",
     hsk1: "HSK1 (Sơ cấp)",
@@ -139,7 +137,7 @@ export const TRANSLATIONS: Record<Language, Dictionary> = {
     date: "Ngày",
     bestScore: "Điểm cao nhất",
     signIn: "Đăng nhập",
-    signOut: "Đăng xuất",
+    signOut: "Đặt lại ứng dụng",
     apiKeyReq: "Yêu cầu API Key",
     apiKeyPlaceholder: "Nhập Google Gemini API Key của bạn",
     saveKey: "Lưu Key",
@@ -152,7 +150,7 @@ export const TRANSLATIONS: Record<Language, Dictionary> = {
     deleteData: "Xóa dữ liệu cá nhân",
     deleteDataConfirm: "Bạn có chắc chắn không? Hành động này sẽ xóa toàn bộ lịch sử học tập và cài đặt hồ sơ trên thiết bị này.",
     deleteDataDesc: "Xóa lịch sử và đặt lại hồ sơ",
-    accountActions: "Tài khoản"
+    accountActions: "Tác vụ"
   }
 };
 
@@ -160,13 +158,10 @@ const App: React.FC = () => {
   const [lang, setLang] = useState<Language>('vi');
   const t = TRANSLATIONS[lang];
 
-  // Auth State
-  const [isAuthenticated, setIsAuthenticated] = useState(false);
-  const [apiKey, setApiKey] = useState<string>('');
-
   // Application View State
-  const [view, setView] = useState<View>('AUTH');
+  const [view, setView] = useState<View>('AUTH'); // Start with Auth
   const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
+  const [apiKey, setApiKey] = useState<string>(''); // Store API Key
   const [history, setHistory] = useState<HistoryEntry[]>([]);
 
   // Lesson State
@@ -181,68 +176,88 @@ const App: React.FC = () => {
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [analysisResult, setAnalysisResult] = useState<AudioAnalysisResult | null>(null);
 
-  // Check local setup
+  // Check local setup on load
   useEffect(() => {
     const localProfile = getProfile();
-    if (localProfile) {
+    // Only proceed to home if we have a profile AND a Key
+    if (localProfile?.gemini_api_key) {
       setUserProfile(localProfile);
+      setApiKey(localProfile.gemini_api_key);
       setLevel(localProfile.level);
       setHistory(getHistory());
+      setView('HOME');
+    } else {
+      setView('AUTH');
     }
   }, []);
 
-  const handleAuthComplete = (userId: string, key: string) => {
-    setIsAuthenticated(true);
-    setApiKey(key);
-    
-    if (userProfile && userProfile.isSetup) {
-      setView('HOME');
-    } else {
-      setView('ONBOARDING');
-    }
-  };
-
-  const handleSignOut = async () => {
-    await supabase.auth.signOut();
-    setIsAuthenticated(false);
+  const handleResetApp = async () => {
+    clearAllData();
+    setHistory([]);
+    setUserProfile(null);
     setApiKey('');
     setView('AUTH');
   };
 
-  const handleClearHistory = () => {
-     clearAllData();
-     setHistory([]);
-     // We don't clear profile completely here to keep the session active, 
-     // but we could. For now just history.
-     // Actually let's clear only history in storage if requested specifically, 
-     // but `clearAllData` clears everything.
-     // Let's stick to `clearAllData` logic requested: "Delete Personal Data"
-  };
-
   const handleDeleteData = async () => {
-    // 1. Clear Local
     clearAllData();
     setHistory([]);
     setUserProfile(null);
-    
-    // 2. Delete Supabase Profile
-    const { data: { user } } = await supabase.auth.getUser();
-    if (user) {
-        await supabase.from('profiles').delete().eq('id', user.id);
-    }
-
-    // 3. Sign Out
-    await handleSignOut();
+    setApiKey('');
+    setView('AUTH');
   };
 
   const toggleLanguage = () => {
     setLang(prev => prev === 'en' ? 'vi' : 'en');
   };
 
-  const handleOnboardingComplete = (profile: UserProfile) => {
+  // Called when Auth component finishes (login + key entry)
+  const handleAuthComplete = (userId: string, key: string) => {
+    setApiKey(key);
+    
+    // Check if we have an existing profile for this user ID in local storage or need to create new
+    const existing = getProfile();
+    let profile: UserProfile;
+    
+    if (existing && existing.id === userId) {
+       profile = { ...existing, gemini_api_key: key };
+    } else {
+       // New or different user
+       profile = {
+         id: userId,
+         email: 'user', // Simplified
+         gemini_api_key: key,
+         level: HSKLevel.HSK1,
+         goals: [],
+         timeSlot: 10,
+         isSetup: false
+       };
+    }
+    
     saveProfile(profile);
     setUserProfile(profile);
-    setLevel(profile.level);
+    
+    if (profile.isSetup) {
+      setLevel(profile.level);
+      setHistory(getHistory());
+      setView('HOME');
+    } else {
+      setView('ONBOARDING');
+    }
+  };
+
+  const handleOnboardingComplete = (data: Partial<UserProfile>) => {
+    if (!userProfile) return;
+    
+    const updatedProfile = { 
+      ...userProfile, 
+      ...data, 
+      isSetup: true 
+    };
+    
+    saveProfile(updatedProfile);
+    setUserProfile(updatedProfile);
+    setLevel(updatedProfile.level);
     setView('HOME');
   };
 
@@ -252,6 +267,7 @@ const App: React.FC = () => {
     setAnalysisResult(null);
     setSelectedLine(null);
     try {
+      // Pass apiKey here
       const lesson = await generateLesson(topic, level, lang, apiKey);
       setCurrentLesson(lesson);
       
@@ -288,6 +304,7 @@ const App: React.FC = () => {
     setAnalysisResult(null);
     
     try {
+      // Pass apiKey here
       const result = await analyzeAudio(audioBlob, selectedLine.chinese, selectedLine.pinyin, lang, apiKey);
       setAnalysisResult(result);
 
@@ -316,12 +333,17 @@ const App: React.FC = () => {
 
   // Rendering Logic
   const renderContent = () => {
-    if (!isAuthenticated) {
+    if (view === 'AUTH') {
       return <Auth t={t} onAuthComplete={handleAuthComplete} />;
     }
 
-    if (view === 'ONBOARDING' || view === 'PROFILE') {
-      // Reuse onboarding for editing profile
+    if (view === 'ONBOARDING') {
+      // Pass current profile data to pre-fill
+      return <Onboarding onComplete={handleOnboardingComplete} t={t} initialProfile={userProfile} />;
+    }
+
+    if (view === 'PROFILE') {
+      // Profile view acts as onboarding editor
       return <Onboarding onComplete={handleOnboardingComplete} t={t} initialProfile={userProfile} />;
     }
 
@@ -334,14 +356,16 @@ const App: React.FC = () => {
         <SettingsView 
           profile={userProfile} 
           t={t} 
-          onSignOut={handleSignOut} 
+          onSignOut={handleResetApp} 
           onDeleteData={handleDeleteData}
           onEditProfile={() => setView('PROFILE')}
           onClearHistory={() => {
-            clearAllData(); // Currently wipes all, simpler
+            clearAllData(); 
             setHistory([]);
-            setUserProfile(null);
-            setView('ONBOARDING'); // Reset
+            // Don't reset user profile fully, just history
+            // Actually clearAllData clears everything in storage.ts
+            // Let's re-save profile minus history
+            if (userProfile) saveProfile(userProfile);
           }}
         />
       );
@@ -469,17 +493,15 @@ const App: React.FC = () => {
             <h1 className="font-bold text-xl tracking-tight">{t.title}</h1>
           </div>
           
-          {isAuthenticated && (
-            <div className="flex items-center gap-3">
-              <button 
-                onClick={toggleLanguage}
-                className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-slate-100 hover:bg-slate-200 text-sm font-semibold text-slate-700 transition-colors"
-              >
-                <Globe size={16} />
-                <span>{lang === 'en' ? 'EN' : 'VI'}</span>
-              </button>
-            </div>
-          )}
+          <div className="flex items-center gap-3">
+            <button 
+              onClick={toggleLanguage}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-slate-100 hover:bg-slate-200 text-sm font-semibold text-slate-700 transition-colors"
+            >
+              <Globe size={16} />
+              <span>{lang === 'en' ? 'EN' : 'VI'}</span>
+            </button>
+          </div>
         </div>
       </header>
 
@@ -487,8 +509,8 @@ const App: React.FC = () => {
         {renderContent()}
       </main>
 
-      {/* Bottom Navigation */}
-      {isAuthenticated && view !== 'ONBOARDING' && view !== 'PROFILE' && (
+      {/* Bottom Navigation - Only show if authenticated and not in Auth flow */}
+      {view !== 'AUTH' && view !== 'ONBOARDING' && view !== 'PROFILE' && (
         <NavBar currentView={view} onChangeView={setView} t={t} />
       )}
     </div>
