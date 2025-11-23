@@ -2,20 +2,50 @@ name: Keep Alive Backend
 
 on:
   schedule:
-    # CẬP NHẬT QUAN TRỌNG:
-    # Chuyển thành chạy mỗi 5 phút (*/5).
-    # Lý do: GitHub Free thường bị delay 10-20 phút. 
-    # Đặt 5 phút giúp đảm bảo ít nhất có 1 lần chạy thành công trong vòng 15 phút để Render không ngủ.
-    - cron: '*/5 * * * *'
-  
-  workflow_dispatch:
+    # Chạy mỗi 14 phút (Render Free Tier ngủ sau 15 phút không hoạt động)
+    - cron: '*/14 * * * *'
+  workflow_dispatch: # Cho phép chạy thủ công để test
 
 jobs:
-  ping_render:
+  wake-up:
     runs-on: ubuntu-latest
     steps:
-      - name: Ping Backend Health Endpoint
+      - name: Wake up Render Service
         run: |
-          # Thay URL bằng link backend của bạn
-          curl -I -m 10 https://micro-mandarin-back.onrender.com/health
-          echo "Ping sent at $(date)"
+          # URL của Backend
+          URL="https://micro-mandarin.onrender.com"
+          
+          # Cấu hình: Thử tối đa 10 lần, mỗi lần chờ 30 giây (Tổng cộng ~5 phút)
+          MAX_RETRIES=10
+          WAIT_SECONDS=30
+          
+          echo "Starting wake-up routine for: $URL"
+          
+          for ((i=1; i<=MAX_RETRIES; i++)); do
+            echo "Attempt $i/$MAX_RETRIES..."
+            
+            # Gửi request GET, lấy HTTP Status Code.
+            # -s: Silent (không hiện progress bar)
+            # -o /dev/null: Bỏ qua body response
+            # -w "%{http_code}": Chỉ in ra status code
+            # -L: Follow redirects
+            # --max-time 30: Timeout cho mỗi request là 30s
+            STATUS_CODE=$(curl -s -o /dev/null -w "%{http_code}" -L --max-time 30 "$URL")
+            
+            echo "Server returned status: $STATUS_CODE"
+            
+            # Nếu status là 200 (OK), server đã dậy
+            if [ "$STATUS_CODE" -eq 200 ]; then
+              echo "✅ Success! Server is active and responding."
+              exit 0
+            fi
+            
+            # Nếu chưa phải 200, đợi và thử lại
+            if [ "$i" -lt "$MAX_RETRIES" ]; then
+              echo "Server not ready yet (sleeping for ${WAIT_SECONDS}s)..."
+              sleep $WAIT_SECONDS
+            else
+              echo "❌ Failed to wake up server after $MAX_RETRIES attempts."
+              exit 1
+            fi
+          done
