@@ -12,8 +12,8 @@ jobs:
     steps:
       - name: Wake up Render Service
         run: |
-          # URL của Backend
-          URL="https://micro-mandarin.onrender.com"
+          # URL của Backend trỏ vào endpoint /health
+          URL="https://micro-mandarin-back.onrender.com/health"
           
           # Cấu hình: Thử tối đa 10 lần, mỗi lần chờ 30 giây (Tổng cộng ~5 phút)
           MAX_RETRIES=10
@@ -31,11 +31,9 @@ jobs:
             
             echo "Server returned status: $STATUS_CODE"
             
-            # Chấp nhận các status code sau là thành công:
-            # 200-299: Thành công
-            # 300-399: Redirect (thường là redirect sang HTTPS hoặc /docs)
-            # 404: Not Found (FastAPI chạy nhưng chưa định nghĩa route /, vẫn tính là server đã dậy)
-            # 401/403: Unauthorized (Server chạy nhưng chặn quyền)
+            # Kiểm tra thành công:
+            # Mong đợi nhất là 200 (OK) từ /health
+            # Tuy nhiên, chấp nhận cả 404/401/403 vì điều đó chứng tỏ server ĐÃ TỈNH DẬY (chỉ là lỗi logic/auth), mục đích keep-alive đã đạt được.
             if [[ "$STATUS_CODE" =~ ^(2[0-9][0-9]|3[0-9][0-9]|404|401|403)$ ]]; then
               echo "✅ Success! Server is active (Status: $STATUS_CODE)."
               exit 0
