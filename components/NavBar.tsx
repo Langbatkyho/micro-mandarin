@@ -1,6 +1,7 @@
+
 import React from 'react';
 import { View, Dictionary } from '../types';
-import { Home, History } from 'lucide-react';
+import { Home, History, Settings } from 'lucide-react';
 
 interface NavBarProps {
   currentView: View;
@@ -12,6 +13,7 @@ export const NavBar: React.FC<NavBarProps> = ({ currentView, onChangeView, t }) 
   const navItems = [
     { id: 'HOME' as View, icon: Home, label: t.navHome },
     { id: 'HISTORY' as View, icon: History, label: t.navHistory },
+    { id: 'SETTINGS' as View, icon: Settings, label: t.navSettings },
   ];
 
   return (

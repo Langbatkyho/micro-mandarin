@@ -1,6 +1,7 @@
+
 import React, { useState, useEffect } from 'react';
 import { generateLesson, analyzeAudio } from './services/geminiService';
-import { getProfile, saveProfile, getHistory, saveHistoryEntry, updateHistoryScore } from './services/storage';
+import { getProfile, saveProfile, getHistory, saveHistoryEntry, updateHistoryScore, clearAllData } from './services/storage';
 import { AppState, HSKLevel, LessonData, DialogueLine, AudioAnalysisResult, Dictionary, View, UserProfile, HistoryEntry } from './types';
 import { AudioRecorder } from './components/AudioRecorder';
 import { FeedbackCard } from './components/FeedbackCard';
@@ -8,6 +9,7 @@ import { DialogueView } from './components/DialogueView';
 import { Spinner } from './components/Spinner';
 import { Onboarding } from './components/Onboarding';
 import { HistoryView } from './components/HistoryView';
+import { SettingsView } from './components/SettingsView';
 import { NavBar } from './components/NavBar';
 import { Auth } from './components/Auth';
 import { supabase } from './supabaseClient';
@@ -21,6 +23,7 @@ export const TRANSLATIONS: Record<Language, Dictionary> = {
     subtitle: "AI Powered",
     navHome: "Today",
     navHistory: "History",
+    navSettings: "Settings",
     navProfile: "Profile",
     placeholder: "Enter topic (e.g., Football, Taxi)",
     generate: "Generate",
@@ -72,13 +75,23 @@ export const TRANSLATIONS: Record<Language, Dictionary> = {
     apiKeyReq: "API Key Required",
     apiKeyPlaceholder: "Enter your Google Gemini API Key",
     saveKey: "Save Key",
-    enterEmail: "Enter Email"
+    enterEmail: "Enter Email",
+    apiKeyHelp: "Don't have a key? Get one for free from Google AI Studio.",
+    getKeyLink: "Get Gemini API Key",
+    settingsTitle: "Settings",
+    editProfile: "Edit",
+    clearHistory: "Clear History",
+    deleteData: "Delete Personal Data",
+    deleteDataConfirm: "Are you sure? This will delete your learning history and reset your profile settings on this device.",
+    deleteDataDesc: "Wipe history and local profile",
+    accountActions: "Account"
   },
   vi: {
     title: "Micro Mandarin",
     subtitle: "Hỗ trợ bởi AI",
     navHome: "Bài học",
     navHistory: "Lịch sử",
+    navSettings: "Cài đặt",
     navProfile: "Hồ sơ",
     placeholder: "Nhập chủ đề (vd: Bóng đá, Mua sắm)",
     generate: "Tạo bài học",
@@ -130,7 +143,16 @@ export const TRANSLATIONS: Record<Language, Dictionary> = {
     apiKeyReq: "Yêu cầu API Key",
     apiKeyPlaceholder: "Nhập Google Gemini API Key của bạn",
     saveKey: "Lưu Key",
-    enterEmail: "Nhập Email"
+    enterEmail: "Nhập Email",
+    apiKeyHelp: "Bạn chưa có Key? Lấy miễn phí từ Google AI Studio.",
+    getKeyLink: "Lấy Gemini API Key",
+    settingsTitle: "Cài đặt",
+    editProfile: "Sửa",
+    clearHistory: "Xóa lịch sử",
+    deleteData: "Xóa dữ liệu cá nhân",
+    deleteDataConfirm: "Bạn có chắc chắn không? Hành động này sẽ xóa toàn bộ lịch sử học tập và cài đặt hồ sơ trên thiết bị này.",
+    deleteDataDesc: "Xóa lịch sử và đặt lại hồ sơ",
+    accountActions: "Tài khoản"
   }
 };
 
@@ -185,6 +207,32 @@ const App: React.FC = () => {
     setIsAuthenticated(false);
     setApiKey('');
     setView('AUTH');
+  };
+
+  const handleClearHistory = () => {
+     clearAllData();
+     setHistory([]);
+     // We don't clear profile completely here to keep the session active, 
+     // but we could. For now just history.
+     // Actually let's clear only history in storage if requested specifically, 
+     // but `clearAllData` clears everything.
+     // Let's stick to `clearAllData` logic requested: "Delete Personal Data"
+  };
+
+  const handleDeleteData = async () => {
+    // 1. Clear Local
+    clearAllData();
+    setHistory([]);
+    setUserProfile(null);
+    
+    // 2. Delete Supabase Profile
+    const { data: { user } } = await supabase.auth.getUser();
+    if (user) {
+        await supabase.from('profiles').delete().eq('id', user.id);
+    }
+
+    // 3. Sign Out
+    await handleSignOut();
   };
 
   const toggleLanguage = () => {
@@ -272,7 +320,8 @@ const App: React.FC = () => {
       return <Auth t={t} onAuthComplete={handleAuthComplete} />;
     }
 
-    if (view === 'ONBOARDING') {
+    if (view === 'ONBOARDING' || view === 'PROFILE') {
+      // Reuse onboarding for editing profile
       return <Onboarding onComplete={handleOnboardingComplete} t={t} initialProfile={userProfile} />;
     }
 
@@ -280,8 +329,22 @@ const App: React.FC = () => {
       return <HistoryView history={history} t={t} />;
     }
 
-    if (view === 'PROFILE') {
-       return <Onboarding onComplete={handleOnboardingComplete} t={t} initialProfile={userProfile} />;
+    if (view === 'SETTINGS') {
+      return (
+        <SettingsView 
+          profile={userProfile} 
+          t={t} 
+          onSignOut={handleSignOut} 
+          onDeleteData={handleDeleteData}
+          onEditProfile={() => setView('PROFILE')}
+          onClearHistory={() => {
+            clearAllData(); // Currently wipes all, simpler
+            setHistory([]);
+            setUserProfile(null);
+            setView('ONBOARDING'); // Reset
+          }}
+        />
+      );
     }
 
     // Default HOME view
@@ -408,20 +471,6 @@ const App: React.FC = () => {
           
           {isAuthenticated && (
             <div className="flex items-center gap-3">
-               <button 
-                onClick={handleSignOut}
-                className="p-2 text-slate-400 hover:bg-red-50 hover:text-red-500 rounded-full transition-colors"
-                title={t.signOut}
-              >
-                <LogOut size={20} />
-              </button>
-              <button 
-                onClick={() => setView('PROFILE')}
-                className="p-2 text-slate-600 hover:bg-slate-100 rounded-full transition-colors"
-                title={t.navProfile}
-              >
-                <Settings size={20} />
-              </button>
               <button 
                 onClick={toggleLanguage}
                 className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-slate-100 hover:bg-slate-200 text-sm font-semibold text-slate-700 transition-colors"
@@ -439,7 +488,7 @@ const App: React.FC = () => {
       </main>
 
       {/* Bottom Navigation */}
-      {isAuthenticated && view !== 'ONBOARDING' && (
+      {isAuthenticated && view !== 'ONBOARDING' && view !== 'PROFILE' && (
         <NavBar currentView={view} onChangeView={setView} t={t} />
       )}
     </div>

@@ -1,7 +1,8 @@
+
 import React, { useState, useEffect } from 'react';
 import { supabase } from '../supabaseClient';
 import { Dictionary } from '../types';
-import { Lock, Key, LogIn, Mail } from 'lucide-react';
+import { Lock, Key, LogIn, Mail, ExternalLink } from 'lucide-react';
 import { Spinner } from './Spinner';
 
 interface AuthProps {
@@ -170,7 +171,7 @@ export const Auth: React.FC<AuthProps> = ({ t, onAuthComplete }) => {
         ) : (
           <div className="space-y-4 animate-in fade-in">
             <div className="bg-yellow-50 p-4 rounded-xl border border-yellow-100 text-sm text-yellow-800">
-              Please provide your Google Gemini API Key. It will be stored securely and used only for your lessons.
+              {t.apiKeyReq}
             </div>
             <div className="space-y-2">
                <label className="text-sm font-bold text-slate-700">Gemini API Key</label>
@@ -185,9 +186,21 @@ export const Auth: React.FC<AuthProps> = ({ t, onAuthComplete }) => {
                    placeholder="AIzaSy..."
                  />
                </div>
+               {/* Instructions Link */}
+               <div className="text-xs text-slate-500 mt-2 flex flex-col gap-1">
+                 <span>{t.apiKeyHelp}</span>
+                 <a 
+                   href="https://aistudio.google.com/app/apikey" 
+                   target="_blank" 
+                   rel="noopener noreferrer"
+                   className="text-red-600 hover:underline flex items-center gap-1 font-medium"
+                 >
+                   {t.getKeyLink} <ExternalLink size={12} />
+                 </a>
+               </div>
              </div>
              <button onClick={handleSaveKey} className="w-full bg-red-600 text-white py-3 rounded-xl font-bold hover:bg-red-700 transition-colors flex justify-center gap-2 items-center">
-               <Lock size={18} /> Save Securely
+               <Lock size={18} /> {t.saveKey}
              </button>
           </div>
         )}

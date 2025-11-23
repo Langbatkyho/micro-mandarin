@@ -1,3 +1,4 @@
+
 import { UserProfile, HistoryEntry, HSKLevel } from '../types';
 
 const PROFILE_KEY = 'mm_user_profile';
@@ -36,6 +37,11 @@ export const updateHistoryScore = (entryId: string, newScore: number) => {
     return item;
   });
   localStorage.setItem(HISTORY_KEY, JSON.stringify(updatedHistory));
+};
+
+export const clearAllData = () => {
+  localStorage.removeItem(PROFILE_KEY);
+  localStorage.removeItem(HISTORY_KEY);
 };
 
 export const createInitialProfile = (): UserProfile => ({

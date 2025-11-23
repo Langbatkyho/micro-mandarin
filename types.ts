@@ -73,7 +73,7 @@ export interface HistoryEntry {
   bestScore: number;
 }
 
-export type View = 'HOME' | 'HISTORY' | 'PROFILE' | 'ONBOARDING' | 'AUTH';
+export type View = 'HOME' | 'HISTORY' | 'PROFILE' | 'SETTINGS' | 'ONBOARDING' | 'AUTH';
 
 export interface Dictionary {
   // General
@@ -82,6 +82,7 @@ export interface Dictionary {
   // Nav
   navHome: string;
   navHistory: string;
+  navSettings: string;
   navProfile: string;
   // Home
   placeholder: string;
@@ -139,4 +140,14 @@ export interface Dictionary {
   apiKeyPlaceholder: string;
   saveKey: string;
   enterEmail: string;
+  apiKeyHelp: string;
+  getKeyLink: string;
+  // Settings
+  settingsTitle: string;
+  editProfile: string;
+  clearHistory: string;
+  deleteData: string;
+  deleteDataConfirm: string;
+  deleteDataDesc: string;
+  accountActions: string;
 }
