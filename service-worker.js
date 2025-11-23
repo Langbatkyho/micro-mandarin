@@ -1,4 +1,4 @@
-const CACHE_NAME = 'micro-mandarin-v1';
+const CACHE_NAME = 'micro-mandarin-v2';
 const urlsToCache = [
   '/',
   '/index.html',
@@ -7,6 +7,9 @@ const urlsToCache = [
 ];
 
 self.addEventListener('install', (event) => {
+  // Force the waiting service worker to become the active service worker.
+  self.skipWaiting(); 
+  
   event.waitUntil(
     caches.open(CACHE_NAME)
       .then((cache) => {
@@ -16,7 +19,7 @@ self.addEventListener('install', (event) => {
 });
 
 self.addEventListener('fetch', (event) => {
-  // Bỏ qua các request API (backend) để luôn lấy dữ liệu mới
+  // Bypass cache for API requests
   if (event.request.url.includes('/api/') || event.request.url.includes('onrender.com')) {
     return; 
   }
@@ -45,4 +48,6 @@ self.addEventListener('activate', (event) => {
       );
     })
   );
+  // Claim any clients immediately, so that the page is controlled by the service worker immediately.
+  return self.clients.claim();
 });
